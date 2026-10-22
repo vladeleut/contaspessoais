@@ -463,6 +463,8 @@ input:focus, select:focus { outline-color: rgba(27, 91, 69, .17); border-color: 
 .ghost-button { color: var(--forest); background: var(--mint); }
 .list-item, .transaction-item { padding: 13px 12px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
 .list-item:last-child, .transaction-item:last-child { border-bottom: 0; }
+.fixed-item-actions { display: grid; justify-items: end; gap: 8px; }
+.confirm-fixed-button { padding: 7px 10px; color: white; font-size: .76rem; font-weight: 700; background: var(--forest); border: 0; border-radius: 5px; }
 .amount.income { color: var(--forest); }
 .amount.expense { color: var(--coral); }
 .empty-state { border-color: #bdcbbf; border-radius: 6px; background: #fafbf8; }

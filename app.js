@@ -6,6 +6,7 @@ const supabaseClient = supabaseUrl && supabaseAnonKey ? window.supabase.createCl
 const state = {
   entries: [],
   fixedExpenses: [],
+  fixedPayments: [],
   creditCards: [],
   accounts: [],
   reserves: [],
@@ -54,6 +55,7 @@ const els = {
   fixedExpensesList: document.getElementById('fixedExpensesList'),
   movementForm: document.getElementById('movementForm'),
   fixedExpenseForm: document.getElementById('fixedExpenseForm'),
+  fixedPaymentAccount: document.getElementById('fixedPaymentAccount'),
 };
 
 function normalizeIncome(row) {
@@ -87,6 +89,8 @@ function normalizeFixed(row) {
     value: Number(row.amount || 0),
     dueDay: Number(row.due_day || 1),
     status: row.status === 'paid' ? 'paid' : 'scheduled',
+    paymentAccountId: row.payment_account_id,
+    paymentMethod: row.payment_method || 'manual',
   };
 }
 
@@ -157,6 +161,11 @@ async function loadData() {
     .select('*')
     .order('due_day', { ascending: true });
 
+  const { data: fixedPayments, error: fixedPaymentsError } = await supabaseClient
+    .from('fixed_expense_payments')
+    .select('*')
+    .eq('budget_month', getCurrentBudgetMonth());
+
   if (incomesError) {
     console.warn('Erro ao carregar incomes:', incomesError);
   }
@@ -165,8 +174,13 @@ async function loadData() {
     console.warn('Erro ao carregar contas fixas:', fixedError);
   }
 
+  if (fixedPaymentsError) {
+    console.warn('Erro ao carregar pagamentos de contas fixas:', fixedPaymentsError);
+  }
+
   state.entries = incomes && incomes.length ? incomes.map(normalizeIncome) : [];
   state.fixedExpenses = fixedExpenses && fixedExpenses.length ? fixedExpenses.map(normalizeFixed) : [];
+  state.fixedPayments = fixedPayments || [];
   saveData();
 }
 
@@ -194,6 +208,9 @@ function renderSettings() {
   els.reservesList.innerHTML = state.reserves.length
     ? state.reserves.map((reserve) => `<div class="compact-list-item"><strong>${reserve.name}</strong><span>Meta ${formatCurrency(reserve.target_amount)} | ${new Date(`${reserve.target_month}T00:00:00`).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span></div>`).join('')
     : '<p class="empty-inline">Nenhum gasto futuro cadastrado.</p>';
+  els.fixedPaymentAccount.innerHTML = '<option value="">Não se aplica</option>' + state.accounts
+    .map((account) => `<option value="${account.id}">${account.name}</option>`)
+    .join('');
 }
 
 async function getCurrentUserId() {
@@ -391,17 +408,49 @@ function renderFixedExpenses() {
 
   els.fixedExpensesList.innerHTML = state.fixedExpenses
     .map(
-      (item) => `
+      (item) => {
+        const payment = state.fixedPayments.find((current) => current.fixed_expense_id === item.id);
+        const account = state.accounts.find((current) => current.id === item.paymentAccountId);
+        const status = payment ? `Paga em ${new Date(`${payment.paid_on}T00:00:00`).toLocaleDateString('pt-BR')}` : 'Aguardando confirmação';
+        const debitDestination = item.paymentMethod === 'automatic_debit' && account ? `Débito: ${account.name}` : 'Pagamento manual';
+        return `
         <div class="list-item">
           <div class="meta">
             <span>${item.name}</span>
-            <span>Vence dia ${item.dueDay} • ${item.status === 'paid' ? 'Paga' : 'Agendada'}</span>
+            <span>Vence dia ${item.dueDay} | ${debitDestination}</span>
+            <span>${status}</span>
           </div>
-          <strong>${formatCurrency(item.value)}</strong>
+          <div class="fixed-item-actions"><strong>${formatCurrency(item.value)}</strong>${payment ? '' : `<button class="confirm-fixed-button" type="button" data-fixed-payment="${item.id}">Confirmar</button>`}</div>
         </div>
-      `
+      `;
+      }
     )
     .join('');
+
+  document.querySelectorAll('[data-fixed-payment]').forEach((button) => {
+    button.addEventListener('click', () => confirmFixedExpensePayment(button.dataset.fixedPayment));
+  });
+}
+
+async function confirmFixedExpensePayment(fixedExpenseId) {
+  const fixedExpense = state.fixedExpenses.find((item) => item.id === fixedExpenseId);
+  const userId = await getCurrentUserId();
+  if (!fixedExpense || !userId) return;
+
+  const { error } = await supabaseClient.from('fixed_expense_payments').insert({
+    user_id: userId,
+    fixed_expense_id: fixedExpense.id,
+    budget_month: getCurrentBudgetMonth(),
+    amount: fixedExpense.value,
+    paid_on: new Date().toISOString().slice(0, 10),
+    payment_account_id: fixedExpense.paymentAccountId || null,
+    payment_method: fixedExpense.paymentMethod,
+  });
+
+  if (!error) {
+    await loadData();
+    render();
+  }
 }
 
 function renderTransactions() {
@@ -516,7 +565,8 @@ async function addFixedExpense(event) {
   const name = document.getElementById('fixedName').value.trim();
   const value = Number(document.getElementById('fixedValue').value);
   const dueDay = Number(document.getElementById('fixedDay').value);
-  const paid = document.getElementById('fixedPaid').checked;
+  const paymentMethod = document.getElementById('fixedPaymentMethod').value;
+  const paymentAccountId = els.fixedPaymentAccount.value || null;
 
   if (!name || Number.isNaN(value) || value <= 0 || dueDay < 1 || dueDay > 31) {
     return;
@@ -529,11 +579,13 @@ async function addFixedExpense(event) {
       amount: value,
       due_day: dueDay,
       category: 'fixa',
-      status: paid ? 'paid' : 'scheduled',
-      paid_at: paid ? new Date().toISOString().slice(0, 10) : null,
+      status: 'scheduled',
+      paid_at: null,
       active: true,
       recurring: true,
       notes: '',
+      payment_method: paymentMethod,
+      payment_account_id: paymentAccountId,
     };
 
     const { error } = await supabaseClient.from('fixed_expenses').insert([payload]);
@@ -546,7 +598,7 @@ async function addFixedExpense(event) {
     }
   }
 
-  state.fixedExpenses.push({ id: crypto.randomUUID(), name, value, dueDay, status: paid ? 'paid' : 'scheduled' });
+  state.fixedExpenses.push({ id: crypto.randomUUID(), name, value, dueDay, status: 'scheduled', paymentMethod, paymentAccountId });
   saveData();
   render();
   event.target.reset();

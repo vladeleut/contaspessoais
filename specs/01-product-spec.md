@@ -28,6 +28,9 @@ Create a mobile-first personal finance app for tracking salaries, fixed expenses
 - Monthly salary is derived from the sum of the confirmed 15th and 30th values. It is never a separate configurable or recorded income.
 - The salary confirmed in a month is the money available to live in the following budget month.
 - A top-up is money added to the current budget month to cover an overage. It has amount, date, and a mandatory origin, such as `tirei do cofrinho`.
+- A fixed expense is a recurring obligation with a mandatory due day. The fixed-expense record defines the recurring rule, while payment confirmation is recorded separately for each budget month.
+- A fixed expense can be paid manually or by transferring money to a configured account that receives an automatic debit. That destination account must be recorded with the fixed expense.
+- Confirming a fixed expense marks only the selected monthly occurrence as paid, records the date, and may record the transfer/automatic-debit destination. It must not mark future months as paid.
 - A user can register three or more credit cards. Every card expense must belong to exactly one configured card.
 - A user can create accounts, including a savings account, to track where available funds are held.
 - A user can create reserve plans for future annual or exceptional costs, such as IPVA, IPTU, and transit expenses. A reserve plan has a target amount, target month, and an optional monthly contribution.
@@ -40,6 +43,7 @@ Create a mobile-first personal finance app for tracking salaries, fixed expenses
 - Use concise, domain-specific language and show empty states when no real records exist.
 - Settings are a dedicated view, separate from the monthly operational dashboard, and must support adding new cards, accounts, and reserve plans over time.
 - The dashboard must show the current salary cycle, its carried expectations, confirmed amounts, and a direct action to record a top-up.
+- The dashboard must show each active fixed expense with its due day and the payment status for the current month, with a direct confirmation action.
 
 ## Out of scope for the current baseline
 - Heavy analytics dashboards
@@ -55,4 +59,5 @@ Create a mobile-first personal finance app for tracking salaries, fixed expenses
 - Users can configure three or more cards, savings accounts, and future-cost reserves without altering application code.
 - A month carries each salary expectation forward from the previous matching salary confirmation, and the following budget month receives the sum only after confirmation.
 - A current-month top-up cannot be saved without its origin.
+- Fixed expenses can be confirmed independently for each month and retain their due day and automatic-debit destination.
 - AI agents can understand the business intent from the spec without reverse engineering the code.
