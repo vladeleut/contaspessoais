@@ -95,6 +95,7 @@ create table if not exists public.budget_months (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references auth.users(id) on delete cascade,
   month_start date not null,
+  opening_balance numeric(12,2) not null default 0,
   total_income numeric(12,2) not null default 0,
   total_fixed_expenses numeric(12,2) not null default 0,
   total_card_expenses numeric(12,2) not null default 0,
@@ -131,6 +132,18 @@ alter table public.card_invoice_adjustments enable row level security;
 alter table public.account_transfers enable row level security;
 alter table public.month_periods enable row level security;
 alter table public.budget_months enable row level security;
+
+drop policy if exists "Users can view own profile" on public.profiles;
+drop policy if exists "Users can update own profile" on public.profiles;
+drop policy if exists "Users can insert own profile" on public.profiles;
+drop policy if exists "Users can manage their incomes" on public.incomes;
+drop policy if exists "Users can manage their fixed expenses" on public.fixed_expenses;
+drop policy if exists "Users can manage their card categories" on public.card_categories;
+drop policy if exists "Users can manage their card expenses" on public.card_expenses;
+drop policy if exists "Users can manage their invoice adjustments" on public.card_invoice_adjustments;
+drop policy if exists "Users can manage their transfers" on public.account_transfers;
+drop policy if exists "Users can manage their months" on public.month_periods;
+drop policy if exists "Users can manage their budget months" on public.budget_months;
 
 create policy "Users can view own profile"
 on public.profiles

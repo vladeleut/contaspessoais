@@ -5,18 +5,22 @@ Create a mobile-first personal finance app for tracking salaries, fixed expenses
 
 ## Core user flows
 1. Sign in with Supabase auth.
-2. Register income entries for salary and other incomes.
-3. Register fixed expenses with due day and paid/scheduled status.
-4. Register card expenses by category.
-5. Group card category names per user and allow custom categories.
-6. View total income, total expense, total card spend, and current month result.
-7. Confirm the salary received on the 15th and 30th for each budget month.
-8. Register a current-month top-up when external money is used to cover an overage, including its origin.
-9. Configure cards, accounts, and planned reserves.
-10. Work with January 2026 as the real baseline for initial usage.
+2. Configure the starting budget month and opening balance for the planning baseline.
+3. Register income entries for salary and other incomes.
+4. Register fixed expenses with due day and paid/scheduled status.
+5. Register card expenses by category.
+6. Group card category names per user and allow custom categories.
+7. View total income, total expense, total card spend, and current month result.
+8. Confirm the salary received on the 15th and 30th for each budget month.
+9. Register a current-month top-up when external money is used to cover an overage, including its origin.
+10. Configure cards, accounts, and planned reserves.
+11. Create and manage budget months in the database so the starting point can be set intentionally.
+12. Work with January 2026 as the real baseline for initial usage.
 
 ## Domain rules
 - Income entries belong to a user and are associated with a monthly budget context.
+- Budget months are persisted in the database and can be created independently of the current calendar date.
+- Each budget month stores its own month_start and opening_balance so the platform can start from a user-defined baseline.
 - Fixed expenses have name, amount, due day, paid status, and recurring behavior.
 - Card expenses are tracked by category, date, and invoice month.
 - Categories are user-scoped and may be created dynamically.
@@ -55,6 +59,7 @@ Create a mobile-first personal finance app for tracking salaries, fixed expenses
 - App loads without demo values when no real data is present.
 - Card category names can be added on the fly.
 - The data model remains consistent with `supabase/create-tables.sql`.
+- Users can create a starting budget month in the database and define its opening balance.
 - The app supports January 2026 as the working starting month.
 - Users can configure three or more cards, savings accounts, and future-cost reserves without altering application code.
 - A month carries each salary expectation forward from the previous matching salary confirmation, and the following budget month receives the sum only after confirmation.

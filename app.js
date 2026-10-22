@@ -4,12 +4,16 @@ const { supabaseUrl, supabaseAnonKey } = window.APP_CONFIG || {};
 const supabaseClient = supabaseUrl && supabaseAnonKey ? window.supabase.createClient(supabaseUrl, supabaseAnonKey) : null;
 
 const state = {
+  selectedMonth: getCurrentMonthKey(),
+  activeSheetTab: 'cards',
+  activeCardId: null,
   entries: [],
   fixedExpenses: [],
   fixedPayments: [],
   creditCards: [],
   accounts: [],
   reserves: [],
+  budgetMonths: [],
   salaryConfirmations: [],
   topups: [],
 };
@@ -34,9 +38,15 @@ const els = {
   cardSettingsForm: document.getElementById('cardSettingsForm'),
   accountSettingsForm: document.getElementById('accountSettingsForm'),
   reserveSettingsForm: document.getElementById('reserveSettingsForm'),
+  budgetMonthForm: document.getElementById('budgetMonthForm'),
   creditCardsList: document.getElementById('creditCardsList'),
   accountsList: document.getElementById('accountsList'),
   reservesList: document.getElementById('reservesList'),
+  budgetMonthsList: document.getElementById('budgetMonthsList'),
+  budgetMonthStart: document.getElementById('budgetMonthStart'),
+  budgetMonthOpeningBalance: document.getElementById('budgetMonthOpeningBalance'),
+  monthSelector: document.getElementById('monthSelector'),
+  sheetTabs: document.getElementById('sheetTabs'),
   salary15Form: document.getElementById('salary15Form'),
   salary30Form: document.getElementById('salary30Form'),
   salary15Expected: document.getElementById('salary15Expected'),
@@ -54,6 +64,7 @@ const els = {
   transactionsList: document.getElementById('transactionsList'),
   fixedExpensesList: document.getElementById('fixedExpensesList'),
   movementForm: document.getElementById('movementForm'),
+  movementCardId: document.getElementById('movementCardId'),
   fixedExpenseForm: document.getElementById('fixedExpenseForm'),
   fixedPaymentAccount: document.getElementById('fixedPaymentAccount'),
 };
@@ -68,6 +79,20 @@ function normalizeIncome(row) {
     date: row.received_on,
     method: 'conta',
     recurring: true,
+  };
+}
+
+function normalizeExpense(row) {
+  return {
+    id: row.id,
+    type: 'expense',
+    title: row.title,
+    category: row.category,
+    value: Number(row.amount || 0),
+    date: row.occurred_on,
+    cardId: row.card_id || null,
+    method: 'cartao',
+    recurring: Boolean(row.is_installment),
   };
 }
 
@@ -94,6 +119,19 @@ function normalizeFixed(row) {
   };
 }
 
+function normalizeBudgetMonth(row) {
+  return {
+    id: row.id,
+    monthStart: row.month_start ? String(row.month_start).slice(0, 7) : '',
+    openingBalance: Number(row.opening_balance || 0),
+    balance: Number(row.balance || row.opening_balance || 0),
+    totalIncome: Number(row.total_income || 0),
+    totalFixedExpenses: Number(row.total_fixed_expenses || 0),
+    totalCardExpenses: Number(row.total_card_expenses || 0),
+    totalAdjustments: Number(row.total_adjustments || 0),
+  };
+}
+
 async function ensureCategoryExists(categoryName) {
   if (!supabaseClient) return;
 
@@ -112,6 +150,112 @@ async function ensureCategoryExists(categoryName) {
 
   if (error) {
     console.warn('Erro ao salvar categoria:', error);
+  }
+}
+
+function getCurrentMonthKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+function formatMonthLabel(monthKey) {
+  const [year, month] = monthKey.split('-').map(Number);
+  const date = new Date(year, month - 1, 1);
+  const monthName = date.toLocaleDateString('pt-BR', { month: 'long' });
+  return `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}/${String(year).slice(-2)}`;
+}
+
+function getMonthOptions() {
+  const [year, month] = state.selectedMonth.split('-').map(Number);
+  const anchor = new Date(year, month - 1, 1);
+  const months = [];
+
+  for (let offset = -12; offset <= 12; offset += 1) {
+    const date = new Date(anchor.getFullYear(), anchor.getMonth() + offset, 1);
+    months.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+  }
+
+  return months;
+}
+
+function getSelectedMonthDateValue() {
+  const [year, month] = state.selectedMonth.split('-').map(Number);
+  return `${year}-${String(month).padStart(2, '0')}-01`;
+}
+
+async function refreshMonthData() {
+  await loadData();
+  await loadSalaryCycle();
+  render();
+  renderSalaryCycle();
+}
+
+function renderMonthSelector() {
+  if (!els.monthSelector) return;
+
+  const options = getMonthOptions();
+  els.monthSelector.innerHTML = options
+    .map((monthKey) => `
+      <button
+        type="button"
+        class="month-pill ${monthKey === state.selectedMonth ? 'active' : ''}"
+        data-month="${monthKey}"
+      >
+        ${formatMonthLabel(monthKey)}
+      </button>
+    `)
+    .join('');
+
+  const activeMonthButton = els.monthSelector.querySelector('.month-pill.active');
+  if (activeMonthButton) {
+    activeMonthButton.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'center' });
+  }
+
+  els.monthSelector.querySelectorAll('[data-month]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      state.selectedMonth = button.dataset.month;
+      renderMonthSelector();
+      renderWorkbookTabs();
+      await refreshMonthData();
+    });
+  });
+}
+
+function renderWorkbookTabs() {
+  if (!els.sheetTabs) return;
+
+  if (state.creditCards.length && (!state.activeSheetTab || state.activeSheetTab === 'cards')) {
+    state.activeSheetTab = `card-${state.creditCards[0].id}`;
+    state.activeCardId = state.creditCards[0].id;
+  }
+
+  const tabs = [
+    ...state.creditCards.map((card) => ({
+      id: `card-${card.id}`,
+      label: card.name,
+    })),
+    { id: 'accounts', label: 'Contas' },
+    { id: 'debts', label: 'Débitos' },
+    { id: 'transfers', label: 'Transferências' },
+    { id: 'balance', label: 'Saldo' },
+  ];
+
+  els.sheetTabs.innerHTML = tabs
+    .map((tab) => `
+      <button
+        type="button"
+        class="sheet-tab ${state.activeSheetTab === tab.id ? 'active' : ''}"
+        data-sheet-tab="${tab.id}"
+      >
+        ${tab.label}
+      </button>
+    `)
+    .join('');
+
+  const activeSheetButton = els.sheetTabs.querySelector('.sheet-tab.active');
+  if (activeSheetButton) {
+    activeSheetButton.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'center' });
   }
 }
 
@@ -151,6 +295,8 @@ async function loadData() {
     return;
   }
 
+  const selectedMonth = getCurrentBudgetMonth(state.selectedMonth);
+
   const { data: incomes, error: incomesError } = await supabaseClient
     .from('incomes')
     .select('*')
@@ -161,10 +307,15 @@ async function loadData() {
     .select('*')
     .order('due_day', { ascending: true });
 
+  const { data: cardExpenses, error: cardExpensesError } = await supabaseClient
+    .from('card_expenses')
+    .select('*')
+    .order('occurred_on', { ascending: false });
+
   const { data: fixedPayments, error: fixedPaymentsError } = await supabaseClient
     .from('fixed_expense_payments')
     .select('*')
-    .eq('budget_month', getCurrentBudgetMonth());
+    .eq('budget_month', selectedMonth);
 
   if (incomesError) {
     console.warn('Erro ao carregar incomes:', incomesError);
@@ -178,7 +329,16 @@ async function loadData() {
     console.warn('Erro ao carregar pagamentos de contas fixas:', fixedPaymentsError);
   }
 
-  state.entries = incomes && incomes.length ? incomes.map(normalizeIncome) : [];
+  if (cardExpensesError) {
+    console.warn('Erro ao carregar gastos de cartão:', cardExpensesError);
+  }
+
+  const normalizedEntries = [
+    ...(incomes && incomes.length ? incomes.map(normalizeIncome) : []),
+    ...(cardExpenses && cardExpenses.length ? cardExpenses.map(normalizeExpense) : []),
+  ];
+
+  state.entries = normalizedEntries;
   state.fixedExpenses = fixedExpenses && fixedExpenses.length ? fixedExpenses.map(normalizeFixed) : [];
   state.fixedPayments = fixedPayments || [];
   saveData();
@@ -187,15 +347,21 @@ async function loadData() {
 async function loadSettings() {
   if (!supabaseClient) return;
 
-  const [{ data: creditCards }, { data: accounts }, { data: reserves }] = await Promise.all([
+  const [{ data: creditCards }, { data: accounts }, { data: reserves }, { data: budgetMonths }] = await Promise.all([
     supabaseClient.from('credit_cards').select('*').eq('active', true).order('name'),
     supabaseClient.from('accounts').select('*').eq('active', true).order('name'),
     supabaseClient.from('reserve_plans').select('*').eq('active', true).order('target_month'),
+    supabaseClient.from('budget_months').select('*').order('month_start', { ascending: true }),
   ]);
 
   state.creditCards = creditCards || [];
   state.accounts = accounts || [];
   state.reserves = reserves || [];
+  state.budgetMonths = (budgetMonths || []).map(normalizeBudgetMonth);
+
+  if (state.budgetMonths.length && !state.budgetMonths.some((month) => month.monthStart === state.selectedMonth)) {
+    state.selectedMonth = state.budgetMonths[0].monthStart;
+  }
 }
 
 function renderSettings() {
@@ -208,9 +374,28 @@ function renderSettings() {
   els.reservesList.innerHTML = state.reserves.length
     ? state.reserves.map((reserve) => `<div class="compact-list-item"><strong>${reserve.name}</strong><span>Meta ${formatCurrency(reserve.target_amount)} | ${new Date(`${reserve.target_month}T00:00:00`).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span></div>`).join('')
     : '<p class="empty-inline">Nenhum gasto futuro cadastrado.</p>';
+  els.budgetMonthsList.innerHTML = state.budgetMonths.length
+    ? state.budgetMonths.map((month) => `<div class="compact-list-item"><strong>${formatMonthLabel(month.monthStart)}</strong><span>Saldo inicial ${formatCurrency(month.openingBalance)}</span></div>`).join('')
+    : '<p class="empty-inline">Nenhum mês de planejamento cadastrado.</p>';
+
   els.fixedPaymentAccount.innerHTML = '<option value="">Não se aplica</option>' + state.accounts
     .map((account) => `<option value="${account.id}">${account.name}</option>`)
     .join('');
+
+  if (els.movementCardId) {
+    const hasCards = state.creditCards.length > 0;
+    els.movementCardId.innerHTML = hasCards
+      ? state.creditCards.map((card) => `<option value="${card.id}">${card.name}</option>`).join('')
+      : '<option value="">Cadastre um cartão</option>';
+
+    if (!state.activeCardId && state.creditCards[0]) {
+      state.activeCardId = state.creditCards[0].id;
+    }
+
+    if (state.activeCardId) {
+      els.movementCardId.value = state.activeCardId;
+    }
+  }
 }
 
 async function getCurrentUserId() {
@@ -218,15 +403,18 @@ async function getCurrentUserId() {
   return user?.id;
 }
 
-function getCurrentBudgetMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+function getCurrentMonthEntries() {
+  const monthKey = state.selectedMonth;
+  const [year, month] = monthKey.split('-').map(Number);
+
+  return state.entries.filter((entry) => {
+    const date = new Date(entry.date);
+    return date.getMonth() + 1 === month && date.getFullYear() === year;
+  });
 }
 
-function getSalaryDate(salaryPart) {
-  const now = new Date();
-  const day = salaryPart === 'day_15' ? 15 : 30;
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${day}`;
+function getCurrentBudgetMonth(monthKey = state.selectedMonth) {
+  return `${monthKey}-01`;
 }
 
 async function loadSalaryCycle() {
@@ -234,23 +422,30 @@ async function loadSalaryCycle() {
 
   const [{ data: salaryConfirmations }, { data: topups }] = await Promise.all([
     supabaseClient.from('salary_confirmations').select('*').order('salary_date', { ascending: false }),
-    supabaseClient.from('budget_topups').select('*').eq('budget_month', getCurrentBudgetMonth()).order('occurred_on', { ascending: false }),
+    supabaseClient.from('budget_topups').select('*').eq('budget_month', getCurrentBudgetMonth(state.selectedMonth)).order('occurred_on', { ascending: false }),
   ]);
 
   state.salaryConfirmations = salaryConfirmations || [];
   state.topups = topups || [];
 }
 
-function getSalaryExpectation(salaryPart) {
-  const currentDate = getSalaryDate(salaryPart);
+function getSalaryDate(salaryPart, monthKey = state.selectedMonth) {
+  const [year, month] = monthKey.split('-').map(Number);
+  const day = salaryPart === 'day_15' ? 15 : 30;
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function getSalaryExpectation(salaryPart, monthKey = state.selectedMonth) {
+  const currentDate = getSalaryDate(salaryPart, monthKey);
   return state.salaryConfirmations.find((item) => item.salary_part === salaryPart && item.salary_date < currentDate)?.confirmed_amount || null;
 }
 
 function renderSalaryCycle() {
-  const current15 = state.salaryConfirmations.find((item) => item.salary_date === getSalaryDate('day_15'));
-  const current30 = state.salaryConfirmations.find((item) => item.salary_date === getSalaryDate('day_30'));
-  const expected15 = getSalaryExpectation('day_15');
-  const expected30 = getSalaryExpectation('day_30');
+  const monthKey = state.selectedMonth;
+  const current15 = state.salaryConfirmations.find((item) => item.salary_date === getSalaryDate('day_15', monthKey));
+  const current30 = state.salaryConfirmations.find((item) => item.salary_date === getSalaryDate('day_30', monthKey));
+  const expected15 = getSalaryExpectation('day_15', monthKey);
+  const expected30 = getSalaryExpectation('day_30', monthKey);
 
   els.salary15Expected.textContent = current15
     ? `Confirmado: ${formatCurrency(current15.confirmed_amount)}`
@@ -271,14 +466,15 @@ async function confirmSalary(event, salaryPart) {
 
   await supabaseClient.from('salary_confirmations').upsert({
     user_id: userId,
-    salary_date: getSalaryDate(salaryPart),
+    salary_date: getSalaryDate(salaryPart, state.selectedMonth),
     salary_part: salaryPart,
-    expected_amount: getSalaryExpectation(salaryPart),
+    expected_amount: getSalaryExpectation(salaryPart, state.selectedMonth),
     confirmed_amount: confirmedAmount,
     confirmed_at: new Date().toISOString(),
   }, { onConflict: 'user_id,salary_date,salary_part' });
   await loadSalaryCycle();
   renderSalaryCycle();
+  render();
 }
 
 async function addTopup(event) {
@@ -290,7 +486,7 @@ async function addTopup(event) {
 
   await supabaseClient.from('budget_topups').insert({
     user_id: userId,
-    budget_month: getCurrentBudgetMonth(),
+    budget_month: getCurrentBudgetMonth(state.selectedMonth),
     amount,
     source,
     occurred_on: new Date().toISOString().slice(0, 10),
@@ -347,22 +543,63 @@ async function addReservePlan(event) {
   renderSettings();
 }
 
+async function addBudgetMonth(event) {
+  event.preventDefault();
+  const userId = await getCurrentUserId();
+  const monthValue = document.getElementById('budgetMonthStart')?.value;
+  const openingBalance = Number(document.getElementById('budgetMonthOpeningBalance')?.value || 0);
+
+  if (!userId || !monthValue || Number.isNaN(openingBalance) || openingBalance < 0) return;
+
+  const monthStart = `${monthValue}-01`;
+
+  await supabaseClient.from('budget_months').upsert({
+    user_id: userId,
+    month_start: monthStart,
+    opening_balance: openingBalance,
+    balance: openingBalance,
+    total_income: 0,
+    total_fixed_expenses: 0,
+    total_card_expenses: 0,
+    total_adjustments: 0,
+  }, { onConflict: 'user_id,month_start' });
+
+  state.selectedMonth = monthValue;
+  event.target.reset();
+  await loadSettings();
+  renderSettings();
+  render();
+  renderSalaryCycle();
+}
+
 function formatCurrency(value) {
   return currencyFormatter.format(Number(value || 0));
 }
 
-function getCurrentMonthEntries() {
-  const now = new Date();
-  const month = now.getMonth();
-  const year = now.getFullYear();
+function getActiveSheetMeta() {
+  const activeTabButton = document.querySelector('.sheet-tab.active');
+  const activeSheetKey = activeTabButton?.dataset.sheetTab || state.activeSheetTab;
+  const isCardTab = Boolean(activeSheetKey && activeSheetKey.startsWith('card-'));
+  const selectedCardId = isCardTab ? state.activeCardId || state.creditCards.find((card) => `card-${card.id}` === activeSheetKey)?.id || state.creditCards[0]?.id : null;
+  const selectedCard = state.creditCards.find((card) => card.id === selectedCardId) || null;
 
-  return state.entries.filter((entry) => {
-    const date = new Date(entry.date);
-    return date.getMonth() === month && date.getFullYear() === year;
-  });
+  return {
+    isCardTab,
+    selectedCard,
+    activeSheetKey,
+  };
 }
 
 function renderSummary() {
+  const activeTabButton = document.querySelector('.sheet-tab.active');
+  const activeTabKey = activeTabButton?.dataset.sheetTab || state.activeSheetTab;
+  if (activeTabKey) {
+    state.activeSheetTab = activeTabKey;
+    if (activeTabKey.startsWith('card-')) {
+      state.activeCardId = activeTabKey.replace('card-', '');
+    }
+  }
+
   const totalIncome = state.entries
     .filter((entry) => entry.type === 'income')
     .reduce((sum, entry) => sum + Number(entry.value), 0);
@@ -380,27 +617,85 @@ function renderSummary() {
     .filter((entry) => entry.type === 'expense')
     .reduce((sum, entry) => sum + Number(entry.value), 0);
 
+  const monthKey = state.selectedMonth;
   const currentMonthSalary = state.salaryConfirmations
-    .filter((item) => item.salary_date.startsWith(getCurrentBudgetMonth().slice(0, 7)))
+    .filter((item) => item.salary_date.startsWith(monthKey))
     .reduce((sum, item) => sum + Number(item.confirmed_amount), 0);
   const currentMonthTopups = state.topups
+    .filter((item) => item.budget_month === getCurrentBudgetMonth(monthKey))
     .reduce((sum, item) => sum + Number(item.amount), 0);
-  const monthBalance = monthIncome + currentMonthSalary + currentMonthTopups - monthExpense;
+
+  const { isCardTab, selectedCard, activeSheetKey } = getActiveSheetMeta();
+  const activeTabLabel = document.querySelector('.sheet-tab.active')?.textContent?.trim() || selectedCard?.name || 'Cartão';
+  const resolvedCardName = selectedCard?.name || activeTabLabel || (activeSheetKey ? activeSheetKey.replace('card-', '') : 'Cartão');
+  const cardMonthlyExpense = isCardTab
+    ? currentMonthEntries
+        .filter((entry) => entry.type === 'expense' && entry.cardId === (state.activeCardId || state.creditCards[0]?.id))
+        .reduce((sum, entry) => sum + Number(entry.value), 0)
+    : monthExpense;
+
+  const monthBalance = monthIncome + currentMonthSalary + currentMonthTopups - (isCardTab ? cardMonthlyExpense : monthExpense);
+  const accountsTotal = monthExpense + state.fixedExpenses.reduce((sum, item) => sum + Number(item.value), 0);
   const creditCardTotal = state.entries
     .filter((entry) => entry.type === 'expense')
     .reduce((sum, entry) => sum + Number(entry.value), 0);
+
+  const monthStamp = `Mês de ${formatMonthLabel(monthKey)}`;
+  const stamp = document.querySelector('.sheet-summary-stamp');
+  if (stamp) {
+    stamp.textContent = monthStamp;
+  }
+
+  const monthHero = document.querySelector('.monthly-hero .hero-heading');
+  const monthEyebrow = monthHero?.querySelector('.eyebrow');
+  const monthHeadline = monthHero?.querySelector('strong');
+  const monthParagraphs = monthHero ? Array.from(monthHero.querySelectorAll('p')) : [];
+  const monthDescription = monthParagraphs[monthParagraphs.length - 1] || null;
+
+  if (monthEyebrow && monthHeadline && monthDescription) {
+    if (isCardTab) {
+      monthEyebrow.textContent = `Fatura ${resolvedCardName}`;
+      monthHeadline.textContent = formatCurrency(cardMonthlyExpense);
+      monthDescription.textContent = `Gastos do cartão ${resolvedCardName} registrados neste mês.`;
+    } else if (state.activeSheetTab === 'accounts') {
+      monthEyebrow.textContent = 'Contas do mês';
+      monthHeadline.textContent = formatCurrency(accountsTotal);
+      monthDescription.textContent = 'Resumo das faturas, débitos e contas fixas pendentes.';
+    } else if (state.activeSheetTab === 'debts') {
+      monthEyebrow.textContent = 'Débitos do mês';
+      monthHeadline.textContent = formatCurrency(monthExpense + state.fixedExpenses.reduce((sum, item) => sum + Number(item.value), 0));
+      monthDescription.textContent = 'Resumo dos débitos e compromissos do período.';
+    } else if (state.activeSheetTab === 'transfers') {
+      monthEyebrow.textContent = 'Transferências';
+      monthHeadline.textContent = formatCurrency(monthBalance);
+      monthDescription.textContent = 'Resumo das transferências e movimentações entre contas.';
+    } else if (state.activeSheetTab === 'balance') {
+      monthEyebrow.textContent = 'Saldo disponível';
+      monthHeadline.textContent = formatCurrency(monthBalance);
+      monthDescription.textContent = 'Resultado de receitas e gastos registrados neste mês.';
+    } else {
+      monthEyebrow.textContent = 'Saldo disponível';
+      monthHeadline.textContent = formatCurrency(monthBalance);
+      monthDescription.textContent = 'Resultado de receitas e gastos registrados neste mês.';
+    }
+  }
 
   els.receitaTotal.textContent = formatCurrency(totalIncome);
   els.despesaTotal.textContent = formatCurrency(totalExpense);
   els.saldoTotal.textContent = formatCurrency(totalIncome - totalExpense);
   els.cartaoTotal.textContent = formatCurrency(creditCardTotal);
 
-  els.monthIncome.textContent = formatCurrency(monthIncome + currentMonthSalary + currentMonthTopups);
-  els.monthExpense.textContent = formatCurrency(monthExpense);
-  els.monthBalance.textContent = formatCurrency(monthBalance);
+  els.monthIncome.textContent = formatCurrency(isCardTab ? monthIncome : monthIncome + currentMonthSalary + currentMonthTopups);
+  els.monthExpense.textContent = formatCurrency(isCardTab ? cardMonthlyExpense : monthExpense);
+  els.monthBalance.textContent = isCardTab && selectedCard
+    ? formatCurrency(cardMonthlyExpense)
+    : formatCurrency(monthBalance);
 }
 
 function renderFixedExpenses() {
+  const monthKey = state.selectedMonth;
+  const currentMonthBudget = getCurrentBudgetMonth(monthKey);
+
   if (!state.fixedExpenses.length) {
     els.fixedExpensesList.innerHTML = '<div class="empty-state">Nenhuma conta fixa cadastrada.</div>';
     return;
@@ -409,7 +704,7 @@ function renderFixedExpenses() {
   els.fixedExpensesList.innerHTML = state.fixedExpenses
     .map(
       (item) => {
-        const payment = state.fixedPayments.find((current) => current.fixed_expense_id === item.id);
+        const payment = state.fixedPayments.find((current) => current.fixed_expense_id === item.id && current.budget_month === currentMonthBudget);
         const account = state.accounts.find((current) => current.id === item.paymentAccountId);
         const status = payment ? `Paga em ${new Date(`${payment.paid_on}T00:00:00`).toLocaleDateString('pt-BR')}` : 'Aguardando confirmação';
         const debitDestination = item.paymentMethod === 'automatic_debit' && account ? `Débito: ${account.name}` : 'Pagamento manual';
@@ -440,7 +735,7 @@ async function confirmFixedExpensePayment(fixedExpenseId) {
   const { error } = await supabaseClient.from('fixed_expense_payments').insert({
     user_id: userId,
     fixed_expense_id: fixedExpense.id,
-    budget_month: getCurrentBudgetMonth(),
+    budget_month: getCurrentBudgetMonth(state.selectedMonth),
     amount: fixedExpense.value,
     paid_on: new Date().toISOString().slice(0, 10),
     payment_account_id: fixedExpense.paymentAccountId || null,
@@ -453,13 +748,130 @@ async function confirmFixedExpensePayment(fixedExpenseId) {
   }
 }
 
-function renderTransactions() {
-  if (!state.entries.length) {
-    els.transactionsList.innerHTML = '<div class="empty-state">Nenhuma movimentação cadastrada ainda.</div>';
+function renderSheetContent() {
+  const monthEntries = getCurrentMonthEntries();
+
+  if (state.activeSheetTab === 'accounts') {
+    const accountRows = [
+      ...state.creditCards.map((card) => {
+        const total = monthEntries
+          .filter((entry) => entry.type === 'expense' && entry.cardId === card.id)
+          .reduce((sum, entry) => sum + Number(entry.value), 0);
+        return {
+          title: `Fatura ${card.name}`,
+          value: total,
+          kind: 'expense',
+          meta: card.due_day ? `Vence dia ${card.due_day}` : 'Fatura',
+        };
+      }),
+      ...state.fixedExpenses.map((item) => ({
+        title: item.name,
+        value: Number(item.value || 0),
+        kind: 'expense',
+        meta: `Vence dia ${item.dueDay}`,
+      })),
+    ].filter((row) => row.value > 0);
+
+    if (!accountRows.length) {
+      els.transactionsList.innerHTML = '<div class="empty-state">Nenhuma conta para confirmar neste mês.</div>';
+      els.fixedExpensesList.innerHTML = '';
+      return;
+    }
+
+    els.transactionsList.innerHTML = accountRows
+      .map((row) => `
+        <div class="transaction-item">
+          <div>
+            <strong>${row.title}</strong>
+            <small>${row.meta}</small>
+          </div>
+          <div class="amount expense">${formatCurrency(row.value)}</div>
+        </div>
+      `)
+      .join('');
+    els.fixedExpensesList.innerHTML = state.fixedExpenses
+      .map((item) => {
+        const payment = state.fixedPayments.find((current) => current.fixed_expense_id === item.id && current.budget_month === getCurrentBudgetMonth(state.selectedMonth));
+        const status = payment ? `Pago em ${new Date(`${payment.paid_on}T00:00:00`).toLocaleDateString('pt-BR')}` : 'Pendente';
+        return `
+          <div class="transaction-item">
+            <div>
+              <strong>${item.name}</strong>
+              <small>Vence dia ${item.dueDay} • ${status}</small>
+            </div>
+            <div class="amount expense">${formatCurrency(item.value)}</div>
+          </div>
+        `;
+      })
+      .join('');
     return;
   }
 
-  const sorted = [...state.entries].sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (state.activeSheetTab === 'debts') {
+    const debts = state.fixedExpenses.map((item) => {
+      const payment = state.fixedPayments.find((current) => current.fixed_expense_id === item.id && current.budget_month === getCurrentBudgetMonth(state.selectedMonth));
+      return { ...item, payment };
+    });
+
+    if (!debts.length) {
+      els.fixedExpensesList.innerHTML = '<div class="empty-state">Nenhum débito cadastrado para este mês.</div>';
+      els.transactionsList.innerHTML = '';
+      return;
+    }
+
+    els.fixedExpensesList.innerHTML = debts
+      .map((item) => {
+        const status = item.payment ? `Pago em ${new Date(`${item.payment.paid_on}T00:00:00`).toLocaleDateString('pt-BR')}` : 'Pendente';
+        return `
+          <div class="transaction-item">
+            <div>
+              <strong>${item.name}</strong>
+              <small>Vence dia ${item.dueDay} • ${status}</small>
+            </div>
+            <div class="amount expense">${formatCurrency(item.value)}</div>
+          </div>
+        `;
+      })
+      .join('');
+    els.transactionsList.innerHTML = '';
+    return;
+  }
+
+  if (state.activeSheetTab === 'transfers') {
+    els.transactionsList.innerHTML = '<div class="empty-state">Transferências do período ainda não foram registradas.</div>';
+    els.fixedExpensesList.innerHTML = '';
+    return;
+  }
+
+  if (state.activeSheetTab === 'balance') {
+    const balanceRows = [
+      { label: 'Entradas do mês', value: formatCurrency(monthEntries.filter((entry) => entry.type === 'income').reduce((sum, entry) => sum + Number(entry.value), 0) + state.salaryConfirmations.filter((item) => item.salary_date.startsWith(state.selectedMonth)).reduce((sum, item) => sum + Number(item.confirmed_amount), 0) + state.topups.filter((item) => item.budget_month === getCurrentBudgetMonth(state.selectedMonth)).reduce((sum, item) => sum + Number(item.amount), 0)) },
+      { label: 'Saídas do mês', value: formatCurrency(monthEntries.filter((entry) => entry.type === 'expense').reduce((sum, entry) => sum + Number(entry.value), 0)) },
+      { label: 'Saldo do mês', value: formatCurrency((monthEntries.filter((entry) => entry.type === 'income').reduce((sum, entry) => sum + Number(entry.value), 0) + state.salaryConfirmations.filter((item) => item.salary_date.startsWith(state.selectedMonth)).reduce((sum, item) => sum + Number(item.confirmed_amount), 0) + state.topups.filter((item) => item.budget_month === getCurrentBudgetMonth(state.selectedMonth)).reduce((sum, item) => sum + Number(item.amount), 0)) - monthEntries.filter((entry) => entry.type === 'expense').reduce((sum, entry) => sum + Number(entry.value), 0)) },
+    ];
+
+    els.transactionsList.innerHTML = balanceRows.map((row) => `
+      <div class="transaction-item">
+        <div><strong>${row.label}</strong></div>
+        <div class="amount ${row.label.includes('Saldo') ? 'income' : 'expense'}">${row.value}</div>
+      </div>
+    `).join('');
+    els.fixedExpensesList.innerHTML = '';
+    return;
+  }
+
+  const selectedCardId = state.activeCardId || state.creditCards[0]?.id;
+  const filteredEntries = selectedCardId
+    ? monthEntries.filter((entry) => entry.type === 'expense' && entry.cardId === selectedCardId)
+    : monthEntries.filter((entry) => entry.type === 'expense');
+
+  if (!filteredEntries.length) {
+    els.transactionsList.innerHTML = '<div class="empty-state">Nenhum lançamento para este cartão neste mês.</div>';
+    els.fixedExpensesList.innerHTML = '';
+    return;
+  }
+
+  const sorted = [...filteredEntries].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   els.transactionsList.innerHTML = sorted
     .map(
@@ -469,13 +881,16 @@ function renderTransactions() {
             <strong>${entry.title}</strong>
             <small>${entry.category} • ${new Date(entry.date).toLocaleDateString('pt-BR')}</small>
           </div>
-          <div class="amount ${entry.type === 'income' ? 'income' : 'expense'}">
-            ${entry.type === 'income' ? '+' : '-'}${formatCurrency(entry.value)}
-          </div>
+          <div class="amount expense">-${formatCurrency(entry.value)}</div>
         </div>
       `
     )
     .join('');
+  els.fixedExpensesList.innerHTML = '';
+}
+
+function renderTransactions() {
+  renderSheetContent();
 }
 
 async function addMovement(event) {
@@ -486,6 +901,7 @@ async function addMovement(event) {
   const category = document.getElementById('movementCategory').value.trim();
   const value = Number(document.getElementById('movementValue').value);
   const date = document.getElementById('movementDate').value;
+  const cardId = document.getElementById('movementCardId')?.value || null;
   const recurring = document.getElementById('movementRecurring').checked;
 
   if (!title || !category || !date || Number.isNaN(value) || value <= 0) {
@@ -524,6 +940,7 @@ async function addMovement(event) {
       amount: value,
       occurred_on: date,
       invoice_month: `${date.slice(0, 7)}-01`,
+      card_id: cardId || null,
       is_installment: false,
       installments_total: null,
       installment_current: null,
@@ -548,6 +965,7 @@ async function addMovement(event) {
     category,
     value,
     date,
+    cardId: type === 'expense' ? cardId : null,
     method: type === 'expense' ? 'cartao' : 'conta',
     recurring,
   });
@@ -605,16 +1023,58 @@ async function addFixedExpense(event) {
   document.getElementById('fixedDay').value = 5;
 }
 
+function renderContextualPanels() {
+  const isCardContext = Boolean(state.activeSheetTab && state.activeSheetTab.startsWith('card-'));
+  const salarySection = document.querySelector('.salary-cycle');
+
+  if (salarySection) {
+    salarySection.classList.toggle('hidden', isCardContext);
+  }
+}
+
 function render() {
+  const activeTabKey = state.activeSheetTab || document.querySelector('.sheet-tab.active')?.dataset.sheetTab;
+
+  if (activeTabKey && activeTabKey.startsWith('card-')) {
+    state.activeSheetTab = activeTabKey;
+    state.activeCardId = activeTabKey.replace('card-', '');
+  }
+
+  if (state.creditCards.length && !state.activeCardId) {
+    state.activeCardId = state.creditCards[0].id;
+  }
+
+  if (state.creditCards.length && (!state.activeSheetTab || state.activeSheetTab === 'cards')) {
+    state.activeSheetTab = `card-${state.creditCards[0].id}`;
+    state.activeCardId = state.creditCards[0].id;
+  }
+
+  renderContextualPanels();
+  renderMonthSelector();
+  renderWorkbookTabs();
   renderSummary();
   renderFixedExpenses();
   renderTransactions();
+
+  const stamp = document.querySelector('.sheet-summary-stamp');
+  if (!stamp) {
+    const target = document.querySelector('.hero-heading');
+    if (target) {
+      const badge = document.createElement('span');
+      badge.className = 'sheet-summary-stamp';
+      badge.textContent = `Mês de ${formatMonthLabel(state.selectedMonth)}`;
+      target.appendChild(badge);
+    }
+  }
 }
 
 function initializeFormDefaults() {
-  const defaultDate = '2026-01-01';
+  const defaultDate = getSelectedMonthDateValue();
 
   document.getElementById('movementDate').value = defaultDate;
+  if (document.getElementById('movementCardId') && state.creditCards.length) {
+    document.getElementById('movementCardId').value = state.activeCardId || state.creditCards[0].id;
+  }
   document.getElementById('fixedDay').value = 5;
   syncMovementCategoryPlaceholder();
 }
@@ -705,6 +1165,24 @@ async function renderAuthenticatedState() {
   }
 }
 
+function bindMonthTabs() {
+  if (!els.sheetTabs) return;
+
+  els.sheetTabs.addEventListener('click', (event) => {
+    const target = event.target.closest('[data-sheet-tab]');
+    if (!target) return;
+
+    const selectedTab = target.dataset.sheetTab;
+    state.activeSheetTab = selectedTab;
+
+    if (selectedTab.startsWith('card-')) {
+      state.activeCardId = selectedTab.replace('card-', '');
+    }
+
+    render();
+  });
+}
+
 function bindQuickActions() {
   document.querySelectorAll('[data-action]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -747,12 +1225,14 @@ els.closeSettingsBtn.addEventListener('click', () => els.settingsPanel.classList
 els.cardSettingsForm.addEventListener('submit', addCreditCard);
 els.accountSettingsForm.addEventListener('submit', addAccount);
 els.reserveSettingsForm.addEventListener('submit', addReservePlan);
+els.budgetMonthForm?.addEventListener('submit', addBudgetMonth);
 els.salary15Form.addEventListener('submit', (event) => confirmSalary(event, 'day_15'));
 els.salary30Form.addEventListener('submit', (event) => confirmSalary(event, 'day_30'));
 els.topupForm.addEventListener('submit', addTopup);
 
 document.getElementById('movementType')?.addEventListener('change', syncMovementCategoryPlaceholder);
 bindQuickActions();
+bindMonthTabs();
 readLocalData();
 initializeFormDefaults();
 render();
