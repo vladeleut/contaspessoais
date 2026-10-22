@@ -1,23 +1,7 @@
-const STORAGE_KEY = 'contas-pessoais-demo';
+const STORAGE_KEY = 'contas-pessoais';
 
 const { supabaseUrl, supabaseAnonKey } = window.APP_CONFIG || {};
 const supabaseClient = supabaseUrl && supabaseAnonKey ? window.supabase.createClient(supabaseUrl, supabaseAnonKey) : null;
-
-const demoData = [
-  { id: crypto.randomUUID(), type: 'income', title: 'Salário 15', category: 'salario_15', value: 5200, date: '2026-10-15', method: 'conta', recurring: true },
-  { id: crypto.randomUUID(), type: 'income', title: 'Salário 30', category: 'salario_30', value: 5400, date: '2026-10-30', method: 'conta', recurring: true },
-  { id: crypto.randomUUID(), type: 'income', title: 'Bônus', category: 'bonus', value: 1800, date: '2026-10-18', method: 'conta', recurring: false },
-  { id: crypto.randomUUID(), type: 'expense', title: 'Aluguel', category: 'Moradia', value: 2400, date: '2026-10-05', method: 'conta', recurring: true },
-  { id: crypto.randomUUID(), type: 'expense', title: 'Internet', category: 'Casa', value: 120, date: '2026-10-06', method: 'conta', recurring: true },
-  { id: crypto.randomUUID(), type: 'expense', title: 'Supermercado', category: 'Alimentação', value: 620, date: '2026-10-09', method: 'cartao', recurring: false },
-  { id: crypto.randomUUID(), type: 'expense', title: 'Cartão Nubank', category: 'Cartão', value: 1800, date: '2026-10-17', method: 'cartao', recurring: false },
-];
-
-const defaultFixed = [
-  { id: crypto.randomUUID(), name: 'Aluguel', value: 2400, dueDay: 5, status: 'scheduled' },
-  { id: crypto.randomUUID(), name: 'Internet', value: 120, dueDay: 6, status: 'paid' },
-  { id: crypto.randomUUID(), name: 'Academia', value: 99, dueDay: 10, status: 'scheduled' },
-];
 
 const state = {
   entries: [],
@@ -49,7 +33,6 @@ const els = {
   fixedExpensesList: document.getElementById('fixedExpensesList'),
   movementForm: document.getElementById('movementForm'),
   fixedExpenseForm: document.getElementById('fixedExpenseForm'),
-  resetDataBtn: document.getElementById('resetDataBtn'),
 };
 
 function normalizeIncome(row) {
@@ -63,6 +46,17 @@ function normalizeIncome(row) {
     method: 'conta',
     recurring: true,
   };
+}
+
+function syncMovementCategoryPlaceholder() {
+  const type = document.getElementById('movementType')?.value || 'income';
+  const categoryInput = document.getElementById('movementCategory');
+
+  if (!categoryInput) return;
+
+  categoryInput.placeholder = type === 'income'
+    ? 'Ex.: Salário 15, Bônus, Outro'
+    : 'Ex.: Mercado, Cartão, Viagem';
 }
 
 function normalizeFixed(row) {
@@ -79,19 +73,19 @@ function readLocalData() {
   const saved = localStorage.getItem(STORAGE_KEY);
 
   if (!saved) {
-    state.entries = [...demoData];
-    state.fixedExpenses = [...defaultFixed];
+    state.entries = [];
+    state.fixedExpenses = [];
     saveData();
     return;
   }
 
   try {
     const parsed = JSON.parse(saved);
-    state.entries = Array.isArray(parsed.entries) ? parsed.entries : [...demoData];
-    state.fixedExpenses = Array.isArray(parsed.fixedExpenses) ? parsed.fixedExpenses : [...defaultFixed];
+    state.entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+    state.fixedExpenses = Array.isArray(parsed.fixedExpenses) ? parsed.fixedExpenses : [];
   } catch {
-    state.entries = [...demoData];
-    state.fixedExpenses = [...defaultFixed];
+    state.entries = [];
+    state.fixedExpenses = [];
   }
 }
 
@@ -129,8 +123,8 @@ async function loadData() {
     console.warn('Erro ao carregar contas fixas:', fixedError);
   }
 
-  state.entries = incomes && incomes.length ? incomes.map(normalizeIncome) : [...demoData];
-  state.fixedExpenses = fixedExpenses && fixedExpenses.length ? fixedExpenses.map(normalizeFixed) : [...defaultFixed];
+  state.entries = incomes && incomes.length ? incomes.map(normalizeIncome) : [];
+  state.fixedExpenses = fixedExpenses && fixedExpenses.length ? fixedExpenses.map(normalizeFixed) : [];
   saveData();
 }
 
@@ -169,7 +163,7 @@ function renderSummary() {
 
   const monthBalance = monthIncome - monthExpense;
   const creditCardTotal = state.entries
-    .filter((entry) => entry.method === 'cartao' && entry.type === 'expense')
+    .filter((entry) => entry.type === 'expense')
     .reduce((sum, entry) => sum + Number(entry.value), 0);
 
   els.receitaTotal.textContent = formatCurrency(totalIncome);
@@ -236,7 +230,6 @@ async function addMovement(event) {
   const category = document.getElementById('movementCategory').value.trim();
   const value = Number(document.getElementById('movementValue').value);
   const date = document.getElementById('movementDate').value;
-  const method = document.getElementById('movementMethod').value;
   const recurring = document.getElementById('movementRecurring').checked;
 
   if (!title || !category || !date || Number.isNaN(value) || value <= 0) {
@@ -251,7 +244,7 @@ async function addMovement(event) {
       amount: value,
       received_on: date,
       budget_month: `${date.slice(0, 7)}-01`,
-      notes: method,
+      notes: recurring ? 'recorrente' : '',
     };
 
     const { error } = await supabaseClient.from('incomes').insert([payload]);
@@ -260,11 +253,12 @@ async function addMovement(event) {
       render();
       event.target.reset();
       initializeFormDefaults();
+      syncMovementCategoryPlaceholder();
       return;
     }
   }
 
-  if (supabaseClient && type === 'expense' && method === 'cartao') {
+  if (supabaseClient && type === 'expense') {
     const payload = {
       user_id: (await supabaseClient.auth.getUser()).data.user.id,
       title,
@@ -284,6 +278,7 @@ async function addMovement(event) {
       render();
       event.target.reset();
       initializeFormDefaults();
+      syncMovementCategoryPlaceholder();
       return;
     }
   }
@@ -295,7 +290,7 @@ async function addMovement(event) {
     category,
     value,
     date,
-    method,
+    method: type === 'expense' ? 'cartao' : 'conta',
     recurring,
   });
 
@@ -303,6 +298,7 @@ async function addMovement(event) {
   render();
   event.target.reset();
   initializeFormDefaults();
+  syncMovementCategoryPlaceholder();
 }
 
 async function addFixedExpense(event) {
@@ -348,13 +344,6 @@ async function addFixedExpense(event) {
   document.getElementById('fixedDay').value = 5;
 }
 
-function resetDemoData() {
-  state.entries = [...demoData];
-  state.fixedExpenses = [...defaultFixed];
-  saveData();
-  render();
-}
-
 function render() {
   renderSummary();
   renderFixedExpenses();
@@ -362,13 +351,11 @@ function render() {
 }
 
 function initializeFormDefaults() {
-  const today = new Date();
-  const isoDate = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 10);
+  const defaultDate = '2026-01-01';
 
-  document.getElementById('movementDate').value = isoDate;
+  document.getElementById('movementDate').value = defaultDate;
   document.getElementById('fixedDay').value = 5;
+  syncMovementCategoryPlaceholder();
 }
 
 async function handleAuthSubmit(mode = 'signIn') {
@@ -479,8 +466,8 @@ els.signUpBtn.addEventListener('click', () => handleAuthSubmit('signUp'));
 els.signOutBtn.addEventListener('click', handleSignOut);
 els.movementForm.addEventListener('submit', addMovement);
 els.fixedExpenseForm.addEventListener('submit', addFixedExpense);
-els.resetDataBtn.addEventListener('click', resetDemoData);
 
+document.getElementById('movementType')?.addEventListener('change', syncMovementCategoryPlaceholder);
 bindQuickActions();
 readLocalData();
 initializeFormDefaults();
