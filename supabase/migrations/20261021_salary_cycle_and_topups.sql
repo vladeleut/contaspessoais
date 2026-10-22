@@ -1,9 +1,5 @@
--- Run this once in the Supabase SQL Editor after 20261021_financial_settings.sql.
-
-alter table public.financial_settings
-  drop column if exists salary_15,
-  drop column if exists salary_30,
-  drop column if exists monthly_salary;
+-- Run this once in the Supabase SQL Editor after the base schema.
+-- The legacy table may not exist when this migration is first applied.
 
 drop table if exists public.financial_settings;
 
