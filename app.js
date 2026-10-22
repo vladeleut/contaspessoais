@@ -69,6 +69,27 @@ function normalizeFixed(row) {
   };
 }
 
+async function ensureCategoryExists(categoryName) {
+  if (!supabaseClient) return;
+
+  const normalized = categoryName.trim();
+  if (!normalized) return;
+
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) return;
+
+  const { error } = await supabaseClient
+    .from('card_categories')
+    .upsert(
+      [{ user_id: user.id, name: normalized }],
+      { onConflict: 'user_id,name' }
+    );
+
+  if (error) {
+    console.warn('Erro ao salvar categoria:', error);
+  }
+}
+
 function readLocalData() {
   const saved = localStorage.getItem(STORAGE_KEY);
 
@@ -259,6 +280,8 @@ async function addMovement(event) {
   }
 
   if (supabaseClient && type === 'expense') {
+    await ensureCategoryExists(category);
+
     const payload = {
       user_id: (await supabaseClient.auth.getUser()).data.user.id,
       title,
