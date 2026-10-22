@@ -29,6 +29,9 @@ create table if not exists public.budget_topups (
 alter table public.salary_confirmations enable row level security;
 alter table public.budget_topups enable row level security;
 
+drop policy if exists "Users can manage their salary confirmations" on public.salary_confirmations;
+drop policy if exists "Users can manage their budget topups" on public.budget_topups;
+
 create policy "Users can manage their salary confirmations"
 on public.salary_confirmations
 for all
