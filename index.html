@@ -51,10 +51,51 @@
           <div class="brand-mark" aria-hidden="true"><i data-lucide="wallet-cards"></i></div>
           <div><p class="eyebrow">Visão mensal</p><h1>Contas pessoais</h1></div>
         </div>
-        <button class="icon-button" type="button" id="signOutBtn" aria-label="Sair" title="Sair"><i data-lucide="log-out"></i></button>
+        <div class="topbar-actions">
+          <button class="icon-button" type="button" id="settingsBtn" aria-label="Configurações" title="Configurações"><i data-lucide="settings-2"></i></button>
+          <button class="icon-button" type="button" id="signOutBtn" aria-label="Sair" title="Sair"><i data-lucide="log-out"></i></button>
+        </div>
       </header>
 
       <main class="layout">
+        <section id="settingsPanel" class="panel settings-panel hidden" aria-labelledby="settingsTitle">
+          <div class="panel-header">
+            <div><p class="eyebrow">Configurações padrão</p><h2 id="settingsTitle">Base do seu planejamento</h2></div>
+            <button class="icon-button" type="button" id="closeSettingsBtn" aria-label="Fechar configurações" title="Fechar"><i data-lucide="x"></i></button>
+          </div>
+          <div class="settings-grid">
+            <form id="salarySettingsForm" class="settings-section">
+              <h3>Salários previstos</h3>
+              <label>Salário dia 15<input id="salary15" type="number" min="0" step="0.01" placeholder="R$ 0,00" /></label>
+              <label>Salário dia 30<input id="salary30" type="number" min="0" step="0.01" placeholder="R$ 0,00" /></label>
+              <label>Salário mensal<input id="monthlySalary" type="number" min="0" step="0.01" placeholder="R$ 0,00" /></label>
+              <button class="primary-button" type="submit">Salvar salários</button>
+            </form>
+            <form id="cardSettingsForm" class="settings-section">
+              <h3>Cartões usados</h3>
+              <label>Nome do cartão<input id="cardName" type="text" placeholder="Ex.: Nubank" required /></label>
+              <div class="mini-grid"><label>Fechamento<input id="cardClosingDay" type="number" min="1" max="31" /></label><label>Vencimento<input id="cardDueDay" type="number" min="1" max="31" /></label></div>
+              <button class="primary-button" type="submit">Adicionar cartão</button>
+              <div id="creditCardsList" class="compact-list"></div>
+            </form>
+            <form id="accountSettingsForm" class="settings-section">
+              <h3>Contas e poupança</h3>
+              <label>Nome da conta<input id="accountName" type="text" placeholder="Ex.: Poupança" required /></label>
+              <label>Tipo<select id="accountType"><option value="principal">Conta principal</option><option value="poupanca">Poupança</option><option value="reserva">Reserva</option><option value="outro">Outra</option></select></label>
+              <button class="primary-button" type="submit">Adicionar conta</button>
+              <div id="accountsList" class="compact-list"></div>
+            </form>
+            <form id="reserveSettingsForm" class="settings-section">
+              <h3>Gastos futuros</h3>
+              <label>Objetivo<input id="reserveName" type="text" placeholder="Ex.: IPVA 2027" required /></label>
+              <div class="mini-grid"><label>Meta<input id="reserveTarget" type="number" min="0.01" step="0.01" required /></label><label>Mês de pagamento<input id="reserveMonth" type="month" required /></label></div>
+              <label>Reserva mensal<input id="reserveContribution" type="number" min="0" step="0.01" placeholder="Opcional" /></label>
+              <button class="primary-button" type="submit">Criar reserva</button>
+              <div id="reservesList" class="compact-list"></div>
+            </form>
+          </div>
+        </section>
+
         <section class="monthly-hero" aria-label="Resumo financeiro do mês">
           <div class="hero-heading"><p class="eyebrow">Saldo disponível</p><strong id="monthBalance">R$ 0,00</strong><p>Resultado de receitas e gastos registrados neste mês.</p></div>
           <div class="hero-metrics"><div><span>Entradas</span><strong id="monthIncome">R$ 0,00</strong></div><div><span>Saídas</span><strong id="monthExpense">R$ 0,00</strong></div></div>

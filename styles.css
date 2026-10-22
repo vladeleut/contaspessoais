@@ -414,6 +414,17 @@ h2 { margin: 2px 0 0; font-size: 1.35rem; }
 .icon-button { display: grid; place-items: center; width: 40px; height: 40px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 50%; }
 .icon-button:hover { color: var(--coral); border-color: var(--coral); }
 .icon-button svg { width: 18px; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+
+.settings-panel { border-top: 4px solid var(--forest); }
+.settings-grid { display: grid; gap: 14px; }
+.settings-section { display: grid; gap: 11px; padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: #fbfcf9; }
+.settings-section h3 { margin: 0 0 3px; font-size: 1rem; }
+.mini-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.compact-list { display: grid; gap: 6px; }
+.compact-list-item { display: flex; flex-direction: column; gap: 3px; padding: 9px 0; border-top: 1px solid var(--line); }
+.compact-list-item strong { font-size: .88rem; }
+.compact-list-item span, .empty-inline { margin: 0; color: var(--muted); font-size: .77rem; }
 
 .monthly-hero { display: grid; gap: 26px; padding: 26px 22px; color: white; background: var(--forest); box-shadow: var(--shadow); animation: rise .45s ease-out both; }
 .monthly-hero .eyebrow { color: #c7dfd2; }
@@ -465,4 +476,5 @@ input:focus, select:focus { outline-color: rgba(27, 91, 69, .17); border-color: 
   .hero-metrics div { padding: 0 12px; }
   .quick-action { min-height: 114px; padding: 17px; }
   .form-grid.compact { grid-template-columns: 1.4fr 1fr .8fr 1fr 1fr; }
+  .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -6,6 +6,10 @@ const supabaseClient = supabaseUrl && supabaseAnonKey ? window.supabase.createCl
 const state = {
   entries: [],
   fixedExpenses: [],
+  settings: null,
+  creditCards: [],
+  accounts: [],
+  reserves: [],
 };
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -22,6 +26,16 @@ const els = {
   authMessage: document.getElementById('authMessage'),
   signUpBtn: document.getElementById('signUpBtn'),
   signOutBtn: document.getElementById('signOutBtn'),
+  settingsBtn: document.getElementById('settingsBtn'),
+  settingsPanel: document.getElementById('settingsPanel'),
+  closeSettingsBtn: document.getElementById('closeSettingsBtn'),
+  salarySettingsForm: document.getElementById('salarySettingsForm'),
+  cardSettingsForm: document.getElementById('cardSettingsForm'),
+  accountSettingsForm: document.getElementById('accountSettingsForm'),
+  reserveSettingsForm: document.getElementById('reserveSettingsForm'),
+  creditCardsList: document.getElementById('creditCardsList'),
+  accountsList: document.getElementById('accountsList'),
+  reservesList: document.getElementById('reservesList'),
   receitaTotal: document.getElementById('receitaTotal'),
   despesaTotal: document.getElementById('despesaTotal'),
   saldoTotal: document.getElementById('saldoTotal'),
@@ -147,6 +161,103 @@ async function loadData() {
   state.entries = incomes && incomes.length ? incomes.map(normalizeIncome) : [];
   state.fixedExpenses = fixedExpenses && fixedExpenses.length ? fixedExpenses.map(normalizeFixed) : [];
   saveData();
+}
+
+async function loadSettings() {
+  if (!supabaseClient) return;
+
+  const [{ data: settings }, { data: creditCards }, { data: accounts }, { data: reserves }] = await Promise.all([
+    supabaseClient.from('financial_settings').select('*').maybeSingle(),
+    supabaseClient.from('credit_cards').select('*').eq('active', true).order('name'),
+    supabaseClient.from('accounts').select('*').eq('active', true).order('name'),
+    supabaseClient.from('reserve_plans').select('*').eq('active', true).order('target_month'),
+  ]);
+
+  state.settings = settings || null;
+  state.creditCards = creditCards || [];
+  state.accounts = accounts || [];
+  state.reserves = reserves || [];
+}
+
+function renderSettings() {
+  document.getElementById('salary15').value = state.settings?.salary_15 || '';
+  document.getElementById('salary30').value = state.settings?.salary_30 || '';
+  document.getElementById('monthlySalary').value = state.settings?.monthly_salary || '';
+  els.creditCardsList.innerHTML = state.creditCards.length
+    ? state.creditCards.map((card) => `<div class="compact-list-item"><strong>${card.name}</strong><span>Fecha ${card.closing_day || '-'} | vence ${card.due_day || '-'}</span></div>`).join('')
+    : '<p class="empty-inline">Nenhum cartão cadastrado.</p>';
+  els.accountsList.innerHTML = state.accounts.length
+    ? state.accounts.map((account) => `<div class="compact-list-item"><strong>${account.name}</strong><span>${account.account_type}</span></div>`).join('')
+    : '<p class="empty-inline">Nenhuma conta cadastrada.</p>';
+  els.reservesList.innerHTML = state.reserves.length
+    ? state.reserves.map((reserve) => `<div class="compact-list-item"><strong>${reserve.name}</strong><span>Meta ${formatCurrency(reserve.target_amount)} | ${new Date(`${reserve.target_month}T00:00:00`).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span></div>`).join('')
+    : '<p class="empty-inline">Nenhum gasto futuro cadastrado.</p>';
+}
+
+async function getCurrentUserId() {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  return user?.id;
+}
+
+async function saveSalarySettings(event) {
+  event.preventDefault();
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+  await supabaseClient.from('financial_settings').upsert({
+    user_id: userId,
+    salary_15: Number(document.getElementById('salary15').value) || null,
+    salary_30: Number(document.getElementById('salary30').value) || null,
+    monthly_salary: Number(document.getElementById('monthlySalary').value) || null,
+    updated_at: new Date().toISOString(),
+  });
+  await loadSettings();
+  renderSettings();
+}
+
+async function addCreditCard(event) {
+  event.preventDefault();
+  const userId = await getCurrentUserId();
+  const name = document.getElementById('cardName').value.trim();
+  if (!userId || !name) return;
+  await supabaseClient.from('credit_cards').insert({
+    user_id: userId,
+    name,
+    closing_day: Number(document.getElementById('cardClosingDay').value) || null,
+    due_day: Number(document.getElementById('cardDueDay').value) || null,
+  });
+  event.target.reset();
+  await loadSettings();
+  renderSettings();
+}
+
+async function addAccount(event) {
+  event.preventDefault();
+  const userId = await getCurrentUserId();
+  const name = document.getElementById('accountName').value.trim();
+  if (!userId || !name) return;
+  await supabaseClient.from('accounts').insert({ user_id: userId, name, account_type: document.getElementById('accountType').value });
+  event.target.reset();
+  await loadSettings();
+  renderSettings();
+}
+
+async function addReservePlan(event) {
+  event.preventDefault();
+  const userId = await getCurrentUserId();
+  const name = document.getElementById('reserveName').value.trim();
+  const targetAmount = Number(document.getElementById('reserveTarget').value);
+  const targetMonth = document.getElementById('reserveMonth').value;
+  if (!userId || !name || !targetAmount || !targetMonth) return;
+  await supabaseClient.from('reserve_plans').insert({
+    user_id: userId,
+    name,
+    target_amount: targetAmount,
+    target_month: `${targetMonth}-01`,
+    monthly_contribution: Number(document.getElementById('reserveContribution').value) || null,
+  });
+  event.target.reset();
+  await loadSettings();
+  renderSettings();
 }
 
 function formatCurrency(value) {
@@ -458,8 +569,10 @@ async function renderAuthenticatedState() {
 
   if (loggedIn) {
     await loadData();
+    await loadSettings();
     initializeFormDefaults();
     render();
+    renderSettings();
   }
 }
 
@@ -497,6 +610,15 @@ els.signUpBtn.addEventListener('click', () => handleAuthSubmit('signUp'));
 els.signOutBtn.addEventListener('click', handleSignOut);
 els.movementForm.addEventListener('submit', addMovement);
 els.fixedExpenseForm.addEventListener('submit', addFixedExpense);
+els.settingsBtn.addEventListener('click', () => {
+  els.settingsPanel.classList.remove('hidden');
+  els.settingsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+els.closeSettingsBtn.addEventListener('click', () => els.settingsPanel.classList.add('hidden'));
+els.salarySettingsForm.addEventListener('submit', saveSalarySettings);
+els.cardSettingsForm.addEventListener('submit', addCreditCard);
+els.accountSettingsForm.addEventListener('submit', addAccount);
+els.reserveSettingsForm.addEventListener('submit', addReservePlan);
 
 document.getElementById('movementType')?.addEventListener('change', syncMovementCategoryPlaceholder);
 bindQuickActions();
