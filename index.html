@@ -64,13 +64,6 @@
             <button class="icon-button" type="button" id="closeSettingsBtn" aria-label="Fechar configurações" title="Fechar"><i data-lucide="x"></i></button>
           </div>
           <div class="settings-grid">
-            <form id="salarySettingsForm" class="settings-section">
-              <h3>Salários previstos</h3>
-              <label>Salário dia 15<input id="salary15" type="number" min="0" step="0.01" placeholder="R$ 0,00" /></label>
-              <label>Salário dia 30<input id="salary30" type="number" min="0" step="0.01" placeholder="R$ 0,00" /></label>
-              <label>Salário mensal<input id="monthlySalary" type="number" min="0" step="0.01" placeholder="R$ 0,00" /></label>
-              <button class="primary-button" type="submit">Salvar salários</button>
-            </form>
             <form id="cardSettingsForm" class="settings-section">
               <h3>Cartões usados</h3>
               <label>Nome do cartão<input id="cardName" type="text" placeholder="Ex.: Nubank" required /></label>
@@ -93,6 +86,15 @@
               <button class="primary-button" type="submit">Criar reserva</button>
               <div id="reservesList" class="compact-list"></div>
             </form>
+          </div>
+        </section>
+
+        <section class="salary-cycle" aria-labelledby="salaryCycleTitle">
+          <div class="panel-header"><div><p class="eyebrow">Ciclo salarial</p><h2 id="salaryCycleTitle">Confirmações do mês</h2></div></div>
+          <div class="salary-cycle-grid">
+            <form id="salary15Form" class="salary-confirmation"><p>Dia 15</p><strong id="salary15Expected">Sem previsão anterior</strong><label>Valor confirmado<input id="salary15Amount" type="number" min="0" step="0.01" required /></label><button class="primary-button" type="submit">Confirmar dia 15</button></form>
+            <form id="salary30Form" class="salary-confirmation"><p>Dia 30</p><strong id="salary30Expected">Sem previsão anterior</strong><label>Valor confirmado<input id="salary30Amount" type="number" min="0" step="0.01" required /></label><button class="primary-button" type="submit">Confirmar dia 30</button></form>
+            <form id="topupForm" class="salary-confirmation topup-form"><p>Cobrir um excesso</p><strong>Adicionar dinheiro no mês atual</strong><label>Valor<input id="topupAmount" type="number" min="0.01" step="0.01" required /></label><label>Origem<input id="topupSource" type="text" placeholder="Ex.: Tirei do cofrinho" required /></label><button class="primary-button" type="submit">Registrar aporte</button></form>
           </div>
         </section>
 

@@ -6,10 +6,11 @@ const supabaseClient = supabaseUrl && supabaseAnonKey ? window.supabase.createCl
 const state = {
   entries: [],
   fixedExpenses: [],
-  settings: null,
   creditCards: [],
   accounts: [],
   reserves: [],
+  salaryConfirmations: [],
+  topups: [],
 };
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -29,13 +30,19 @@ const els = {
   settingsBtn: document.getElementById('settingsBtn'),
   settingsPanel: document.getElementById('settingsPanel'),
   closeSettingsBtn: document.getElementById('closeSettingsBtn'),
-  salarySettingsForm: document.getElementById('salarySettingsForm'),
   cardSettingsForm: document.getElementById('cardSettingsForm'),
   accountSettingsForm: document.getElementById('accountSettingsForm'),
   reserveSettingsForm: document.getElementById('reserveSettingsForm'),
   creditCardsList: document.getElementById('creditCardsList'),
   accountsList: document.getElementById('accountsList'),
   reservesList: document.getElementById('reservesList'),
+  salary15Form: document.getElementById('salary15Form'),
+  salary30Form: document.getElementById('salary30Form'),
+  salary15Expected: document.getElementById('salary15Expected'),
+  salary30Expected: document.getElementById('salary30Expected'),
+  salary15Amount: document.getElementById('salary15Amount'),
+  salary30Amount: document.getElementById('salary30Amount'),
+  topupForm: document.getElementById('topupForm'),
   receitaTotal: document.getElementById('receitaTotal'),
   despesaTotal: document.getElementById('despesaTotal'),
   saldoTotal: document.getElementById('saldoTotal'),
@@ -166,23 +173,18 @@ async function loadData() {
 async function loadSettings() {
   if (!supabaseClient) return;
 
-  const [{ data: settings }, { data: creditCards }, { data: accounts }, { data: reserves }] = await Promise.all([
-    supabaseClient.from('financial_settings').select('*').maybeSingle(),
+  const [{ data: creditCards }, { data: accounts }, { data: reserves }] = await Promise.all([
     supabaseClient.from('credit_cards').select('*').eq('active', true).order('name'),
     supabaseClient.from('accounts').select('*').eq('active', true).order('name'),
     supabaseClient.from('reserve_plans').select('*').eq('active', true).order('target_month'),
   ]);
 
-  state.settings = settings || null;
   state.creditCards = creditCards || [];
   state.accounts = accounts || [];
   state.reserves = reserves || [];
 }
 
 function renderSettings() {
-  document.getElementById('salary15').value = state.settings?.salary_15 || '';
-  document.getElementById('salary30').value = state.settings?.salary_30 || '';
-  document.getElementById('monthlySalary').value = state.settings?.monthly_salary || '';
   els.creditCardsList.innerHTML = state.creditCards.length
     ? state.creditCards.map((card) => `<div class="compact-list-item"><strong>${card.name}</strong><span>Fecha ${card.closing_day || '-'} | vence ${card.due_day || '-'}</span></div>`).join('')
     : '<p class="empty-inline">Nenhum cartão cadastrado.</p>';
@@ -199,19 +201,87 @@ async function getCurrentUserId() {
   return user?.id;
 }
 
-async function saveSalarySettings(event) {
+function getCurrentBudgetMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+function getSalaryDate(salaryPart) {
+  const now = new Date();
+  const day = salaryPart === 'day_15' ? 15 : 30;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${day}`;
+}
+
+async function loadSalaryCycle() {
+  if (!supabaseClient) return;
+
+  const [{ data: salaryConfirmations }, { data: topups }] = await Promise.all([
+    supabaseClient.from('salary_confirmations').select('*').order('salary_date', { ascending: false }),
+    supabaseClient.from('budget_topups').select('*').eq('budget_month', getCurrentBudgetMonth()).order('occurred_on', { ascending: false }),
+  ]);
+
+  state.salaryConfirmations = salaryConfirmations || [];
+  state.topups = topups || [];
+}
+
+function getSalaryExpectation(salaryPart) {
+  const currentDate = getSalaryDate(salaryPart);
+  return state.salaryConfirmations.find((item) => item.salary_part === salaryPart && item.salary_date < currentDate)?.confirmed_amount || null;
+}
+
+function renderSalaryCycle() {
+  const current15 = state.salaryConfirmations.find((item) => item.salary_date === getSalaryDate('day_15'));
+  const current30 = state.salaryConfirmations.find((item) => item.salary_date === getSalaryDate('day_30'));
+  const expected15 = getSalaryExpectation('day_15');
+  const expected30 = getSalaryExpectation('day_30');
+
+  els.salary15Expected.textContent = current15
+    ? `Confirmado: ${formatCurrency(current15.confirmed_amount)}`
+    : expected15 ? `Previsão do mês anterior: ${formatCurrency(expected15)}` : 'Sem previsão anterior';
+  els.salary30Expected.textContent = current30
+    ? `Confirmado: ${formatCurrency(current30.confirmed_amount)}`
+    : expected30 ? `Previsão do mês anterior: ${formatCurrency(expected30)}` : 'Sem previsão anterior';
+  els.salary15Amount.value = current15?.confirmed_amount || expected15 || '';
+  els.salary30Amount.value = current30?.confirmed_amount || expected30 || '';
+}
+
+async function confirmSalary(event, salaryPart) {
   event.preventDefault();
+  const input = salaryPart === 'day_15' ? els.salary15Amount : els.salary30Amount;
+  const confirmedAmount = Number(input.value);
   const userId = await getCurrentUserId();
-  if (!userId) return;
-  await supabaseClient.from('financial_settings').upsert({
+  if (!userId || Number.isNaN(confirmedAmount) || confirmedAmount < 0) return;
+
+  await supabaseClient.from('salary_confirmations').upsert({
     user_id: userId,
-    salary_15: Number(document.getElementById('salary15').value) || null,
-    salary_30: Number(document.getElementById('salary30').value) || null,
-    monthly_salary: Number(document.getElementById('monthlySalary').value) || null,
-    updated_at: new Date().toISOString(),
+    salary_date: getSalaryDate(salaryPart),
+    salary_part: salaryPart,
+    expected_amount: getSalaryExpectation(salaryPart),
+    confirmed_amount: confirmedAmount,
+    confirmed_at: new Date().toISOString(),
+  }, { onConflict: 'user_id,salary_date,salary_part' });
+  await loadSalaryCycle();
+  renderSalaryCycle();
+}
+
+async function addTopup(event) {
+  event.preventDefault();
+  const amount = Number(document.getElementById('topupAmount').value);
+  const source = document.getElementById('topupSource').value.trim();
+  const userId = await getCurrentUserId();
+  if (!userId || !source || Number.isNaN(amount) || amount <= 0) return;
+
+  await supabaseClient.from('budget_topups').insert({
+    user_id: userId,
+    budget_month: getCurrentBudgetMonth(),
+    amount,
+    source,
+    occurred_on: new Date().toISOString().slice(0, 10),
   });
-  await loadSettings();
-  renderSettings();
+  event.target.reset();
+  await loadSalaryCycle();
+  renderSalaryCycle();
+  render();
 }
 
 async function addCreditCard(event) {
@@ -293,7 +363,12 @@ function renderSummary() {
     .filter((entry) => entry.type === 'expense')
     .reduce((sum, entry) => sum + Number(entry.value), 0);
 
-  const monthBalance = monthIncome - monthExpense;
+  const currentMonthSalary = state.salaryConfirmations
+    .filter((item) => item.salary_date.startsWith(getCurrentBudgetMonth().slice(0, 7)))
+    .reduce((sum, item) => sum + Number(item.confirmed_amount), 0);
+  const currentMonthTopups = state.topups
+    .reduce((sum, item) => sum + Number(item.amount), 0);
+  const monthBalance = monthIncome + currentMonthSalary + currentMonthTopups - monthExpense;
   const creditCardTotal = state.entries
     .filter((entry) => entry.type === 'expense')
     .reduce((sum, entry) => sum + Number(entry.value), 0);
@@ -303,7 +378,7 @@ function renderSummary() {
   els.saldoTotal.textContent = formatCurrency(totalIncome - totalExpense);
   els.cartaoTotal.textContent = formatCurrency(creditCardTotal);
 
-  els.monthIncome.textContent = formatCurrency(monthIncome);
+  els.monthIncome.textContent = formatCurrency(monthIncome + currentMonthSalary + currentMonthTopups);
   els.monthExpense.textContent = formatCurrency(monthExpense);
   els.monthBalance.textContent = formatCurrency(monthBalance);
 }
@@ -570,9 +645,11 @@ async function renderAuthenticatedState() {
   if (loggedIn) {
     await loadData();
     await loadSettings();
+    await loadSalaryCycle();
     initializeFormDefaults();
     render();
     renderSettings();
+    renderSalaryCycle();
   }
 }
 
@@ -615,10 +692,12 @@ els.settingsBtn.addEventListener('click', () => {
   els.settingsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 els.closeSettingsBtn.addEventListener('click', () => els.settingsPanel.classList.add('hidden'));
-els.salarySettingsForm.addEventListener('submit', saveSalarySettings);
 els.cardSettingsForm.addEventListener('submit', addCreditCard);
 els.accountSettingsForm.addEventListener('submit', addAccount);
 els.reserveSettingsForm.addEventListener('submit', addReservePlan);
+els.salary15Form.addEventListener('submit', (event) => confirmSalary(event, 'day_15'));
+els.salary30Form.addEventListener('submit', (event) => confirmSalary(event, 'day_30'));
+els.topupForm.addEventListener('submit', addTopup);
 
 document.getElementById('movementType')?.addEventListener('change', syncMovementCategoryPlaceholder);
 bindQuickActions();
