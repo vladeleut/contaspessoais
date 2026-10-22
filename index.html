@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contas Pessoais</title>
+    <meta
+      name="description"
+      content="Sistema pessoal de controle financeiro com foco em mobile-first e integração com Supabase."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="authScreen" class="auth-shell">
+      <div class="auth-card">
+        <p class="eyebrow">Acesso</p>
+        <h1>Contas Pessoais</h1>
+
+        <form id="authForm" class="auth-form">
+          <label>
+            E-mail
+            <input id="authEmail" type="email" placeholder="voce@email.com" required />
+          </label>
+
+          <label>
+            Senha
+            <input id="authPassword" type="password" placeholder="••••••••" required />
+          </label>
+
+          <div class="auth-actions">
+            <button class="primary-button" type="submit">Entrar</button>
+            <button class="ghost-button" type="button" id="signUpBtn">Criar conta</button>
+          </div>
+        </form>
+
+        <p id="authMessage" class="auth-message" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <div id="appScreen" class="app-shell hidden">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Controle financeiro</p>
+          <h1>Contas Pessoais</h1>
+        </div>
+
+        <div class="topbar-actions">
+          <button class="ghost-button" type="button" id="resetDataBtn">Resetar demo</button>
+          <button class="ghost-button danger" type="button" id="signOutBtn">Sair</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="quick-actions">
+          <button class="quick-action" type="button" data-action="income">Registrar entrada</button>
+          <button class="quick-action" type="button" data-action="card">Registrar gasto com cartão</button>
+          <button class="quick-action" type="button" data-action="fixed">Registrar conta fixa</button>
+          <button class="quick-action" type="button" data-action="confirm">Confirmar conta fixa</button>
+          <button class="quick-action" type="button" data-action="month">Visualizar mês</button>
+        </section>
+
+        <section class="summary-grid" aria-label="Resumo financeiro">
+          <article class="summary-card income">
+            <span>Receita total</span>
+            <strong id="receitaTotal">R$ 0,00</strong>
+          </article>
+          <article class="summary-card expense">
+            <span>Despesa total</span>
+            <strong id="despesaTotal">R$ 0,00</strong>
+          </article>
+          <article class="summary-card balance">
+            <span>Saldo</span>
+            <strong id="saldoTotal">R$ 0,00</strong>
+          </article>
+          <article class="summary-card card">
+            <span>Cartão</span>
+            <strong id="cartaoTotal">R$ 0,00</strong>
+          </article>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Adicionar movimentação</h2>
+          </div>
+
+          <form id="movementForm" class="form-grid">
+            <label>
+              Tipo
+              <select id="movementType" required>
+                <option value="income">Receita</option>
+                <option value="expense">Despesa</option>
+              </select>
+            </label>
+
+            <label>
+              Nome
+              <input id="movementTitle" type="text" placeholder="Ex.: Salário 15, Uber, Internet" required />
+            </label>
+
+            <label>
+              Categoria
+              <input id="movementCategory" type="text" placeholder="Ex.: Salário, Casa, Cartão" required />
+            </label>
+
+            <label>
+              Valor
+              <input id="movementValue" type="number" step="0.01" min="0.01" placeholder="0,00" required />
+            </label>
+
+            <label>
+              Data
+              <input id="movementDate" type="date" required />
+            </label>
+
+            <label>
+              Forma de pagamento
+              <select id="movementMethod">
+                <option value="conta">Conta</option>
+                <option value="cartao">Cartão</option>
+                <option value="pix">Pix</option>
+                <option value="dinheiro">Dinheiro</option>
+              </select>
+            </label>
+
+            <label class="checkbox-line">
+              <input id="movementRecurring" type="checkbox" />
+              <span>Recorrente mensal</span>
+            </label>
+
+            <button type="submit" class="primary-button">Salvar movimentação</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Contas fixas</h2>
+          </div>
+          <form id="fixedExpenseForm" class="form-grid compact">
+            <label>
+              Nome
+              <input id="fixedName" type="text" placeholder="Ex.: Aluguel" required />
+            </label>
+
+            <label>
+              Valor
+              <input id="fixedValue" type="number" step="0.01" min="0.01" placeholder="0,00" required />
+            </label>
+
+            <label>
+              Dia de vencimento
+              <input id="fixedDay" type="number" min="1" max="31" value="5" required />
+            </label>
+
+            <label class="checkbox-line">
+              <input id="fixedPaid" type="checkbox" />
+              <span>Já foi paga</span>
+            </label>
+
+            <button type="submit" class="primary-button">Adicionar conta</button>
+          </form>
+
+          <div id="fixedExpensesList" class="list-box"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Resumo do mês</h2>
+          </div>
+          <div class="month-grid">
+            <div>
+              <p class="muted-label">Receitas</p>
+              <strong id="monthIncome">R$ 0,00</strong>
+            </div>
+            <div>
+              <p class="muted-label">Despesas</p>
+              <strong id="monthExpense">R$ 0,00</strong>
+            </div>
+            <div>
+              <p class="muted-label">Saldo</p>
+              <strong id="monthBalance">R$ 0,00</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Histórico</h2>
+          </div>
+          <div id="transactionsList" class="transaction-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
