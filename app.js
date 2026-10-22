@@ -468,8 +468,16 @@ function bindQuickActions() {
     button.addEventListener('click', () => {
       const action = button.dataset.action;
       const map = {
-        income: () => document.getElementById('movementTitle').focus(),
-        card: () => document.getElementById('movementTitle').focus(),
+        income: () => {
+          document.getElementById('movementType').value = 'income';
+          syncMovementCategoryPlaceholder();
+          document.getElementById('movementTitle').focus();
+        },
+        card: () => {
+          document.getElementById('movementType').value = 'expense';
+          syncMovementCategoryPlaceholder();
+          document.getElementById('movementTitle').focus();
+        },
         fixed: () => document.getElementById('fixedName').focus(),
         confirm: () => document.getElementById('fixedName').focus(),
         month: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
@@ -495,6 +503,7 @@ bindQuickActions();
 readLocalData();
 initializeFormDefaults();
 render();
+window.lucide?.createIcons();
 
 if (supabaseClient) {
   supabaseClient.auth.onAuthStateChange((_event, session) => {

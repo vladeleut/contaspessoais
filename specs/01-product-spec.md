@@ -20,6 +20,13 @@ Create a mobile-first personal finance app for tracking salaries, fixed expenses
 - Eventual expenses should be handled under the single category `Eventuais`.
 - The app should not rely on demo data in production mode.
 
+## Experience requirements
+- The home screen must prioritize the current monthly position before data-entry forms.
+- Income, card expense, and fixed expense are distinct financial actions and must remain visually distinct.
+- The interface must be lightweight, mobile-first, and optimized for frequent, one-handed use.
+- Forms should stay available on the same page but should not visually dominate an empty financial dashboard.
+- Use concise, domain-specific language and show empty states when no real records exist.
+
 ## Out of scope for the current baseline
 - Heavy analytics dashboards
 - CSV import/export

@@ -10,17 +10,16 @@
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div id="authScreen" class="auth-shell">
       <div class="auth-card">
-        <p class="eyebrow">Acesso</p>
-        <h1>Contas Pessoais</h1>
+        <div class="brand-mark" aria-hidden="true"><i data-lucide="wallet-cards"></i></div>
+        <p class="eyebrow">Seu dinheiro, no ritmo certo</p>
+        <h1>Contas pessoais</h1>
+        <p class="auth-intro">Organize entradas, contas e gastos do cartão em um só lugar.</p>
 
         <form id="authForm" class="auth-form">
           <label>
@@ -45,48 +44,35 @@
 
     <div id="appScreen" class="app-shell hidden">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Controle financeiro</p>
-          <h1>Contas Pessoais</h1>
+        <div class="brand-line">
+          <div class="brand-mark" aria-hidden="true"><i data-lucide="wallet-cards"></i></div>
+          <div><p class="eyebrow">Visão mensal</p><h1>Contas pessoais</h1></div>
         </div>
-
-        <div class="topbar-actions">
-
-          <button class="ghost-button danger" type="button" id="signOutBtn">Sair</button>
-        </div>
+        <button class="icon-button" type="button" id="signOutBtn" aria-label="Sair" title="Sair"><i data-lucide="log-out"></i></button>
       </header>
 
       <main class="layout">
-        <section class="quick-actions">
-          <button class="quick-action" type="button" data-action="income">Registrar entrada</button>
-          <button class="quick-action" type="button" data-action="card">Registrar gasto com cartão</button>
-          <button class="quick-action" type="button" data-action="fixed">Registrar conta fixa</button>
-          <button class="quick-action" type="button" data-action="confirm">Confirmar conta fixa</button>
-          <button class="quick-action" type="button" data-action="month">Visualizar mês</button>
+        <section class="monthly-hero" aria-label="Resumo financeiro do mês">
+          <div class="hero-heading"><p class="eyebrow">Saldo disponível</p><strong id="monthBalance">R$ 0,00</strong><p>Resultado de receitas e gastos registrados neste mês.</p></div>
+          <div class="hero-metrics"><div><span>Entradas</span><strong id="monthIncome">R$ 0,00</strong></div><div><span>Saídas</span><strong id="monthExpense">R$ 0,00</strong></div></div>
         </section>
 
-        <section class="summary-grid" aria-label="Resumo financeiro">
-          <article class="summary-card income">
-            <span>Receita total</span>
-            <strong id="receitaTotal">R$ 0,00</strong>
-          </article>
-          <article class="summary-card expense">
-            <span>Despesa total</span>
-            <strong id="despesaTotal">R$ 0,00</strong>
-          </article>
-          <article class="summary-card balance">
-            <span>Saldo</span>
-            <strong id="saldoTotal">R$ 0,00</strong>
-          </article>
-          <article class="summary-card card">
-            <span>Cartão</span>
-            <strong id="cartaoTotal">R$ 0,00</strong>
-          </article>
+        <section class="quick-actions" aria-label="Ações rápidas">
+          <button class="quick-action income-action" type="button" data-action="income"><i data-lucide="arrow-down-left"></i><span>Nova entrada</span></button>
+          <button class="quick-action card-action" type="button" data-action="card"><i data-lucide="credit-card"></i><span>Gasto no cartão</span></button>
+          <button class="quick-action fixed-action" type="button" data-action="fixed"><i data-lucide="calendar-clock"></i><span>Conta fixa</span></button>
+        </section>
+
+        <section class="summary-grid" aria-label="Acumulados">
+          <article class="summary-card income"><span>Entradas acumuladas</span><strong id="receitaTotal">R$ 0,00</strong></article>
+          <article class="summary-card expense"><span>Gastos acumulados</span><strong id="despesaTotal">R$ 0,00</strong></article>
+          <article class="summary-card card"><span>Cartão acumulado</span><strong id="cartaoTotal">R$ 0,00</strong></article>
+          <article class="summary-card balance"><span>Saldo acumulado</span><strong id="saldoTotal">R$ 0,00</strong></article>
         </section>
 
         <section class="panel">
           <div class="panel-header">
-            <h2>Adicionar movimentação</h2>
+            <div><p class="eyebrow">Registro</p><h2>Nova movimentação</h2></div>
           </div>
 
           <form id="movementForm" class="form-grid">
@@ -100,7 +86,7 @@
 
             <label>
               Nome
-              <input id="movementTitle" type="text" placeholder="Ex.: Salário 15, Uber, Internet" required />
+              <input id="movementTitle" type="text" placeholder="Ex.: Salário 15, mercado" required />
             </label>
 
             <label>
@@ -129,7 +115,7 @@
 
         <section class="panel">
           <div class="panel-header">
-            <h2>Contas fixas</h2>
+            <div><p class="eyebrow">Recorrências</p><h2>Contas fixas</h2></div>
           </div>
           <form id="fixedExpenseForm" class="form-grid compact">
             <label>
@@ -160,27 +146,7 @@
 
         <section class="panel">
           <div class="panel-header">
-            <h2>Resumo do mês</h2>
-          </div>
-          <div class="month-grid">
-            <div>
-              <p class="muted-label">Receitas</p>
-              <strong id="monthIncome">R$ 0,00</strong>
-            </div>
-            <div>
-              <p class="muted-label">Despesas</p>
-              <strong id="monthExpense">R$ 0,00</strong>
-            </div>
-            <div>
-              <p class="muted-label">Saldo</p>
-              <strong id="monthBalance">R$ 0,00</strong>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-header">
-            <h2>Histórico</h2>
+            <div><p class="eyebrow">Lançamentos</p><h2>Histórico</h2></div>
           </div>
           <div id="transactionsList" class="transaction-list"></div>
         </section>
@@ -189,6 +155,7 @@
 
     <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="app.js"></script>
   </body>
 </html>
